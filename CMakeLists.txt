@@ -64,7 +64,6 @@ find_package(Boost REQUIRED COMPONENTS system)
 add_service_files(
   FILES
   AddCollisionBox.srv
-  AddCollisionPlane.srv
   AddOccupancyGrid.srv
   PlanningSceneControl.srv
 )

@@ -1,6 +1,5 @@
 #include <ros/ros.h>
 #include "jeff_moveit/AddCollisionBox.h"
-#include "jeff_moveit/AddCollisionPlane.h"
 #include "jeff_moveit/AddOccupancyGrid.h"
 #include "jeff_moveit/PlanningSceneControl.h"
 
@@ -146,31 +145,6 @@ bool add_collision_box(jeff_moveit::AddCollisionBox::Request &req, jeff_moveit::
 }
 
 
-bool add_collision_plane(jeff_moveit::AddCollisionPlane::Request &req, jeff_moveit::AddCollisionPlane::Response &res) {
-    // make the table
-    moveit_msgs::CollisionObject object;
-    object.header.frame_id = req.frame_id;
-    object.id = req.id;
-
-    shape_msgs::Plane plane;
-    plane.coef[0] = req.coef[0];
-    plane.coef[1] = req.coef[1];
-    plane.coef[2] = req.coef[2];
-    plane.coef[3] = req.coef[3];
-
-    geometry_msgs::Pose plane_pose;
-    plane_pose.position = req.position;
-    plane_pose.orientation = req.orientation;
-
-    object.planes.push_back(plane);
-    object.plane_poses.push_back(plane_pose);
-    object.operation = object.ADD;
-
-    planning_scene_interface->applyCollisionObject(object);
-    return true;
-}
-
-
 bool planning_scene_controller(jeff_moveit::PlanningSceneControl::Request &req, jeff_moveit::PlanningSceneControl::Response &res) {
     res.error = "OK";
     if (req.input.compare("CLEAR") == 0)
@@ -225,7 +199,6 @@ int main(int argc, char ** argv) {
     ros::AsyncSpinner spinner(0);
     ros::NodeHandle nh;
     ros::ServiceServer add_box_service = nh.advertiseService("add_collision_box", add_collision_box);
-    ros::ServiceServer add_plane_service = nh.advertiseService("add_collision_plane", add_collision_plane);
     ros::ServiceServer add_occupancy_service = nh.advertiseService("add_occupancy_grid", add_occupancy_grid);
     ros::ServiceServer planning_scene_service = nh.advertiseService("planning_scene_ctl", planning_scene_controller);
     spinner.start();
