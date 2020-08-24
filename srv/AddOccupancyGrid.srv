@@ -1,0 +1,8 @@
+string frame_id
+string id
+float64 grid_size
+geometry_msgs/Point filter_min
+geometry_msgs/Point filter_max
+sensor_msgs/PointCloud2 points
+---
+sensor_msgs/PointCloud2 points
