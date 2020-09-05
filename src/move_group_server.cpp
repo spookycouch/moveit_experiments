@@ -2,6 +2,7 @@
 #include "jeff_moveit/AddCollisionBox.h"
 #include "jeff_moveit/AddOccupancyGrid.h"
 #include "jeff_moveit/PlanningSceneControl.h"
+#include "jeff_moveit/Pick.h"
 
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/move_group_interface/move_group_interface.h>
@@ -57,6 +58,7 @@ bool add_occupancy_grid(jeff_moveit::AddOccupancyGrid::Request &req, jeff_moveit
     // filter x,y,z to cube (min-max)
     pcl::PassThrough<pcl::PointXYZ> ptfilter(true);
     ptfilter.setInputCloud(cloud);
+    
     ptfilter.setFilterFieldName("x");
     ptfilter.setFilterLimits(req.filter_min.x, req.filter_max.x);
     ptfilter.filter(*cloud);
@@ -69,6 +71,7 @@ bool add_occupancy_grid(jeff_moveit::AddOccupancyGrid::Request &req, jeff_moveit
     ptfilter.setFilterLimits(req.filter_min.z, req.filter_max.z);
     ptfilter.filter(*cloud);
 
+    // create voxel grid
     pcl::VoxelGrid<pcl::PointXYZ> vg;
     vg.setInputCloud(cloud);
     vg.setLeafSize(req.grid_size, req.grid_size, req.grid_size);
@@ -76,7 +79,7 @@ bool add_occupancy_grid(jeff_moveit::AddOccupancyGrid::Request &req, jeff_moveit
     cloud.swap(downsampled_cloud);
 
 
-    // make the grid
+    // apply grid as collision object in planning scene
     moveit_msgs::CollisionObject object;
     object.header.frame_id = req.frame_id;
     object.id = req.id;
@@ -95,9 +98,9 @@ bool add_occupancy_grid(jeff_moveit::AddOccupancyGrid::Request &req, jeff_moveit
         shape_msgs::SolidPrimitive primitive;
         primitive.type = primitive.BOX;
         primitive.dimensions.resize(3);
-        primitive.dimensions[0] = req.grid_size;
-        primitive.dimensions[1] = req.grid_size;
-        primitive.dimensions[2] = req.grid_size;
+        primitive.dimensions[0] = req.box_size;
+        primitive.dimensions[1] = req.box_size;
+        primitive.dimensions[2] = req.box_size;
 
         geometry_msgs::Pose box_pose;
         box_pose.position.x = point_it->x;
@@ -112,7 +115,6 @@ bool add_occupancy_grid(jeff_moveit::AddOccupancyGrid::Request &req, jeff_moveit
     object.operation = object.ADD;
     planning_scene_interface->applyCollisionObject(object);
 
-    std::cout << count << std::endl;
 
     pcl::toROSMsg(*cloud, res.points);
     return true;
@@ -147,10 +149,10 @@ bool add_collision_box(jeff_moveit::AddCollisionBox::Request &req, jeff_moveit::
 
 bool planning_scene_controller(jeff_moveit::PlanningSceneControl::Request &req, jeff_moveit::PlanningSceneControl::Response &res) {
     res.error = "OK";
-    if (req.input.compare("CLEAR") == 0)
+    if (req.input.compare("CLEAR_COLLISION") == 0)
         planning_scene_interface->removeCollisionObjects(planning_scene_interface->getKnownObjectNames());
-    else if (req.input.compare("MOVE") == 0)
-        move();
+    else if (req.input.compare("CLEAR_ATTACH") == 0)
+        group_arm_torso->detachObject();
     else
         res.error = "INVALID INPUT";
 
@@ -158,20 +160,10 @@ bool planning_scene_controller(jeff_moveit::PlanningSceneControl::Request &req, 
 }
 
 
-bool move() {
-    std::cout << "moving" << std::endl;
-    ros::Duration(2.0).sleep();
-
-    geometry_msgs::PoseStamped goal_pose;
-    goal_pose.header.frame_id = "base_footprint";
-    goal_pose.pose.position.x = 0.876036 - 0.15;
-    goal_pose.pose.position.y = -0.010633;
-    goal_pose.pose.position.z = 0.9;
-    goal_pose.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(PI/2,0,0);
-
+bool move(jeff_moveit::Move::Request &req, jeff_moveit::Move::Response &res) {
     group_arm_torso->setPlannerId("SBLKConfigDefault");
     group_arm_torso->setPoseReferenceFrame("base_footprint");
-    group_arm_torso->setPoseTarget(goal_pose);
+    group_arm_torso->setPoseTarget(req.pose);
 
     group_arm_torso->getEndEffectorLink();
     group_arm_torso->getPlanningFrame();
@@ -183,6 +175,64 @@ bool move() {
     group_arm_torso->plan(plan);
 
     group_arm_torso->move();
+    return true;
+}
+
+bool pick(jeff_moveit::Pick::Request &req, jeff_moveit::Pick::Response &res) {
+    std::vector<moveit_msgs::Grasp> grasps;
+    grasps.resize(1);
+
+    grasps[0].pre_grasp_posture.joint_names.resize(2);
+    grasps[0].pre_grasp_posture.joint_names[0] = "gripper_left_finger_joint";
+    grasps[0].pre_grasp_posture.joint_names[1] = "gripper_right_finger_joint";
+    grasps[0].pre_grasp_posture.points.resize(1);
+    grasps[0].pre_grasp_posture.points[0].positions.resize(2);
+    grasps[0].pre_grasp_posture.points[0].positions[0] = 0.04;
+    grasps[0].pre_grasp_posture.points[0].positions[1] = 0.04;
+    grasps[0].pre_grasp_posture.points[0].time_from_start = ros::Duration(0.5);
+
+    // note: the rosparams
+    //     /gripper_controller/constraints/gripper_left_finger_joint/goal
+    //     /gripper_controller/constraints/gripper_left_finger_joint/goal
+    // must be sufficiently large to reach this goal; set in
+    //     /opt/pal/erbium/share/tiago_controller_configuration/config/pal-gripper_joint_trajectory_controllers.yaml
+    grasps[0].grasp_posture.joint_names.resize(2);
+    grasps[0].grasp_posture.joint_names[0] = "gripper_left_finger_joint";
+    grasps[0].grasp_posture.joint_names[1] = "gripper_right_finger_joint";
+    grasps[0].grasp_posture.points.resize(1);
+    grasps[0].grasp_posture.points[0].positions.resize(2);
+    grasps[0].grasp_posture.points[0].positions[0] = 0.00;
+    grasps[0].grasp_posture.points[0].positions[1] = 0.00;
+    grasps[0].grasp_posture.points[0].time_from_start = ros::Duration(0.5);
+
+    grasps[0].grasp_pose.header.frame_id = req.frame_id;
+    // grasps[0].grasp_pose.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(0,0,0); // door
+    grasps[0].grasp_pose.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(PI/2,0,0); // coffee
+    grasps[0].grasp_pose.pose.position.x = req.position.x;
+    grasps[0].grasp_pose.pose.position.y = req.position.y;
+    grasps[0].grasp_pose.pose.position.z = req.position.z;
+
+    geometry_msgs::Vector3 approach, retreat;
+    approach.x = 1.0; approach.y = 0.0; approach.z = 0.0;
+    // retreat.x = 0.0; retreat.y = 0.0; retreat.z = -0.3; // door
+    retreat.x = 0.0; retreat.y = 0.0; retreat.z = 1.0; // coffee
+
+    grasps[0].pre_grasp_approach.direction.header.frame_id = "base_footprint";
+    grasps[0].pre_grasp_approach.direction.vector.x = approach.x;
+    grasps[0].pre_grasp_approach.direction.vector.y = approach.y;
+    grasps[0].pre_grasp_approach.direction.vector.z = approach.z;
+    grasps[0].pre_grasp_approach.min_distance = 0.095;
+    grasps[0].pre_grasp_approach.desired_distance = 0.9;
+
+    grasps[0].post_grasp_retreat.direction.header.frame_id = "base_footprint";
+    grasps[0].post_grasp_retreat.direction.vector.x = retreat.x;
+    grasps[0].post_grasp_retreat.direction.vector.y = retreat.y;
+    grasps[0].post_grasp_retreat.direction.vector.z = retreat.z;
+    grasps[0].post_grasp_retreat.min_distance = 0.1;
+    grasps[0].post_grasp_retreat.desired_distance = 0.2;
+
+    std::cout << "ERROR CODE: " << group_arm_torso->pick(req.id, grasps) << std::endl;
+
     return true;
 }
 
@@ -201,6 +251,8 @@ int main(int argc, char ** argv) {
     ros::ServiceServer add_box_service = nh.advertiseService("add_collision_box", add_collision_box);
     ros::ServiceServer add_occupancy_service = nh.advertiseService("add_occupancy_grid", add_occupancy_grid);
     ros::ServiceServer planning_scene_service = nh.advertiseService("planning_scene_ctl", planning_scene_controller);
+    ros::ServiceServer pick_service = nh.advertiseService("pick_object", pick);
+    ros::ServiceServer move_service = nh.advertiseService("move_gripper", move);
     spinner.start();
     ros::waitForShutdown();
 }
