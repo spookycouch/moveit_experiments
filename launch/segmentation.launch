@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <rosparam command="load" file="$(find jeff_moveit)/src/motions.yaml" />
+    <node name="lasr_object_detection_yolo" pkg="lasr_object_detection_yolo" type="object_detection_server.py" output="screen" respawn="true"></node>
+    <node name="jeff_segment_objects" pkg="jeff_segment_objects" type="jeff_segment_objects_node" output="screen" respawn="true"></node>
+    <node name="jeff_moveit" pkg="jeff_moveit" type="move_group_server" output="screen" respawn="true"></node>
+</launch>

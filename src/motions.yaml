@@ -1,0 +1,37 @@
+play_motion:
+  motions:
+    default:
+      joints: [torso_lift_joint, head_2_joint]
+      points:
+      - positions: [0.0, 0.0]
+        time_from_start: 2.0
+    
+    look_down:
+      joints: [torso_lift_joint, head_2_joint]
+      points:
+      - positions: [0.25, -0.85]
+        time_from_start: 2.0
+    
+    look_straight:
+      joints: [head_1_joint]
+      points:
+      - positions: [0.0]
+        time_from_start: 2.0
+
+    look_left:
+      joints: [head_1_joint]
+      points:
+      - positions: [-0.7]
+        time_from_start: 2.0
+    
+    look_right:
+      joints: [head_1_joint]
+      points:
+      - positions: [0.7]
+        time_from_start: 2.0
+    
+    look_default:
+      joints: [head_1_joint, head_2_joint]
+      points:
+      - positions: [0.0, 0.0]
+        time_from_start: 2.0

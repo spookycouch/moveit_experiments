@@ -3,6 +3,7 @@
 #include "jeff_moveit/AddOccupancyGrid.h"
 #include "jeff_moveit/PlanningSceneControl.h"
 #include "jeff_moveit/Pick.h"
+#include "jeff_moveit/Move.h"
 
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/move_group_interface/move_group_interface.h>
@@ -18,13 +19,14 @@
 #include <pcl/filters/voxel_grid.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
+#include <jeff_moveit/simple_grasps.h>
+
 // function defs
 bool add_collision_box(jeff_moveit::AddCollisionBox::Request &req, jeff_moveit::AddCollisionBox::Response &res);
-bool move();
+bool move(jeff_moveit::Move::Request &req, jeff_moveit::Move::Response &res);
 
 
 // global variable defs
-const double PI = 3.142;
 tf::TransformListener* listener;
 moveit::planning_interface::MoveGroupInterface* group_arm_torso;
 moveit::planning_interface::PlanningSceneInterface* planning_scene_interface;
@@ -175,67 +177,20 @@ bool move(jeff_moveit::Move::Request &req, jeff_moveit::Move::Response &res) {
     group_arm_torso->plan(plan);
 
     group_arm_torso->move();
+    res.pose = group_arm_torso->getCurrentPose();
+
     return true;
 }
+
 
 bool pick(jeff_moveit::Pick::Request &req, jeff_moveit::Pick::Response &res) {
     std::vector<moveit_msgs::Grasp> grasps;
-    grasps.resize(1);
-
-    grasps[0].pre_grasp_posture.joint_names.resize(2);
-    grasps[0].pre_grasp_posture.joint_names[0] = "gripper_left_finger_joint";
-    grasps[0].pre_grasp_posture.joint_names[1] = "gripper_right_finger_joint";
-    grasps[0].pre_grasp_posture.points.resize(1);
-    grasps[0].pre_grasp_posture.points[0].positions.resize(2);
-    grasps[0].pre_grasp_posture.points[0].positions[0] = 0.04;
-    grasps[0].pre_grasp_posture.points[0].positions[1] = 0.04;
-    grasps[0].pre_grasp_posture.points[0].time_from_start = ros::Duration(0.5);
-
-    // note: the rosparams
-    //     /gripper_controller/constraints/gripper_left_finger_joint/goal
-    //     /gripper_controller/constraints/gripper_left_finger_joint/goal
-    // must be sufficiently large to reach this goal; set in
-    //     /opt/pal/erbium/share/tiago_controller_configuration/config/pal-gripper_joint_trajectory_controllers.yaml
-    grasps[0].grasp_posture.joint_names.resize(2);
-    grasps[0].grasp_posture.joint_names[0] = "gripper_left_finger_joint";
-    grasps[0].grasp_posture.joint_names[1] = "gripper_right_finger_joint";
-    grasps[0].grasp_posture.points.resize(1);
-    grasps[0].grasp_posture.points[0].positions.resize(2);
-    grasps[0].grasp_posture.points[0].positions[0] = 0.00;
-    grasps[0].grasp_posture.points[0].positions[1] = 0.00;
-    grasps[0].grasp_posture.points[0].time_from_start = ros::Duration(0.5);
-
-    grasps[0].grasp_pose.header.frame_id = req.frame_id;
-    // grasps[0].grasp_pose.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(0,0,0); // door
-    grasps[0].grasp_pose.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(PI/2,0,0); // coffee
-    grasps[0].grasp_pose.pose.position.x = req.position.x;
-    grasps[0].grasp_pose.pose.position.y = req.position.y;
-    grasps[0].grasp_pose.pose.position.z = req.position.z;
-
-    geometry_msgs::Vector3 approach, retreat;
-    approach.x = 1.0; approach.y = 0.0; approach.z = 0.0;
-    // retreat.x = 0.0; retreat.y = 0.0; retreat.z = -0.3; // door
-    retreat.x = 0.0; retreat.y = 0.0; retreat.z = 1.0; // coffee
-
-    grasps[0].pre_grasp_approach.direction.header.frame_id = "base_footprint";
-    grasps[0].pre_grasp_approach.direction.vector.x = approach.x;
-    grasps[0].pre_grasp_approach.direction.vector.y = approach.y;
-    grasps[0].pre_grasp_approach.direction.vector.z = approach.z;
-    grasps[0].pre_grasp_approach.min_distance = 0.095;
-    grasps[0].pre_grasp_approach.desired_distance = 0.9;
-
-    grasps[0].post_grasp_retreat.direction.header.frame_id = "base_footprint";
-    grasps[0].post_grasp_retreat.direction.vector.x = retreat.x;
-    grasps[0].post_grasp_retreat.direction.vector.y = retreat.y;
-    grasps[0].post_grasp_retreat.direction.vector.z = retreat.z;
-    grasps[0].post_grasp_retreat.min_distance = 0.1;
-    grasps[0].post_grasp_retreat.desired_distance = 0.2;
-
+    simple_grasps(grasps, req.point, req.size, req.retreat);
     std::cout << "ERROR CODE: " << group_arm_torso->pick(req.id, grasps) << std::endl;
+    res.pose = group_arm_torso->getCurrentPose();
 
     return true;
 }
-
 
 
 int main(int argc, char ** argv) {

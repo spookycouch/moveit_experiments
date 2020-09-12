@@ -94,14 +94,15 @@ pick = rospy.ServiceProxy('pick_object', Pick)
 
 ps_ctl('CLEAR_ATTACH')
 ps_ctl('CLEAR_COLLISION')
-play_motion('look_down')
+play_motion('look_default')
 pcl = get_pclmsg(10)
 frame, img = frame_imgmsg_from_pclmsg(pcl)
 
 
 
 # ADD MOVEIT COLLISION OBJECTS TO SCENE
-res = segment_objects(pcl, 0.2, 0.02) # coffee
+# TODO: probably dont need segmentation
+res = segment_objects(pcl, 0.4, 0.05) # coffee
 height, width, channels = frame.shape
 cluster_boxes = []
 count = 0
@@ -131,8 +132,7 @@ for cluster in res.clusters:
 
 
 # IOU MATCHING WITH YOLO
-# objects = yolo(img, 'door_and_handle_custom', 0.2, 0.3).detected_objects
-objects = yolo(img, 'costa', 0.5, 0.3).detected_objects
+objects = yolo(img, 'door_and_handle_custom', 0.2, 0.3).detected_objects
 cost_matrix = np.zeros((len(objects), len(cluster_boxes)))
 for i, obj in enumerate(objects):
     for j, (box,id, cluster) in enumerate(cluster_boxes):
@@ -148,13 +148,11 @@ for i, cluster in enumerate(cluster_boxes):
     for j, index in enumerate(matches[1]):
         if i == index:
             cv2.putText(frame, 'cluster {}: {}'.format(cluster[1], objects[j].name), (cluster[0][0], cluster[0][1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
-            if objects[j].name == 'coffee':
+            if objects[j].name == 'door handle':
                 selection = cluster
 
 if selection is not None:
     cluster = selection
-
-    play_motion('look_down')
 
     min_point = Point()
     max_point = Point()
@@ -182,9 +180,9 @@ if selection is not None:
         res = add_grid('base_footprint', 'grid' + str(i), 0.05, 0.05, min_p, max_p, pcl.points)
 
     position = PointStamped(cluster[2].header, cluster[2].point)
-    size = Vector3(cluster[2].size.x, cluster[2].size.y, cluster[2].size.z)
+    size = Vector3(cluster[2].size.x, cluster[2].size.y, min(0.08, cluster[2].size.z))
+    print size
     selection = cluster[1], position, Vector3(0,0,0), size
-
 
     pick(*selection)
 
