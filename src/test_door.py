@@ -2,9 +2,11 @@
 import rospy
 import numpy as np
 import cv2
+import sys
 from cv_bridge import CvBridge, CvBridgeError
 from scipy.optimize import linear_sum_assignment
 from tf.transformations import quaternion_from_euler
+from cmd_vels import move as cmd_vel
 
 from jeff_segment_objects.srv import SegmentObjects, RemoveBox
 from jeff_moveit.srv import AddCollisionBox, PlanningSceneControl, AddOccupancyGrid, Pick, Move
@@ -76,6 +78,9 @@ def play_motion(motion_name):
     play_motion_client.send_goal(pose_goal)
     play_motion_client.wait_for_result()
 
+if not len(sys.argv) == 2 or not (sys.argv[1] == 'pull' or sys.argv[1] == 'push'):
+    print 'usage: rosrun jeff_moveit test_door.py <pull/push>'
+    sys.exit(0)
 
 rospy.init_node('test_move')
 
@@ -158,7 +163,7 @@ for detection in detections:
         res = add_grid('base_footprint', 'grid' + str(i), 0.05, 0.05, min_p, max_p, pcl.points)
 
 
-    # # pre-approach
+    # pre-approach
     # pose = PoseStamped()
     # pose.header.frame_id = 'base_footprint'
     # pose.header.stamp = rospy.Time.now()
@@ -176,24 +181,79 @@ for detection in detections:
     res = pick(*selection)
     print res.pose.pose
 
-    # open the door just a little
-    pose = PoseStamped()
-    pose.header.frame_id = 'base_footprint'
-    pose.header.stamp = rospy.Time.now()
-    pose.pose.position.x = res.pose.pose.position.x - 0.25
-    pose.pose.position.y = res.pose.pose.position.y
-    pose.pose.position.z = centre_point.z
-    pose.pose.orientation = res.pose.pose.orientation
-    res = move(pose)
-    print res.pose.pose
+    if sys.argv[1] == 'pull':
+        # open the door just a little
+        pose = PoseStamped()
+        pose.header.frame_id = 'base_footprint'
+        pose.header.stamp = rospy.Time.now()
+        pose.pose.position.x = res.pose.pose.position.x - 0.2
+        pose.pose.position.y = res.pose.pose.position.y
+        pose.pose.position.z = centre_point.z
+        pose.pose.orientation = res.pose.pose.orientation
+        res = move(pose)
+        print res.pose.pose
 
-    # reverse
-    twist = Twist()
-    twist.linear.x = -1.0
-    twist_pub = rospy.Publisher('/mobile_base_controller/cmd_vel', Twist, queue_size=10)
-    start_time = rospy.Time.now()
-    while rospy.Time.now() - start_time < rospy.Duration(1.5):
-        twist_pub.publish(twist)
+        # reverse
+        cmd_vel(-0.3)
+
+        # reset
+        play_motion('open_gripper')
+        pose = PoseStamped()
+        pose.header.frame_id = 'base_footprint'
+        pose.header.stamp = rospy.Time.now()
+        pose.pose.position.x = 0.3
+        pose.pose.position.y = -0.4
+        pose.pose.position.z = centre_point.z
+        pose.pose.orientation = res.pose.pose.orientation
+        move(pose)
+        print res.pose.pose
+
+        pcl = get_pclmsg()
+        max_p = Point(2,2,1)
+        min_p = Point(-1,-1,0.5)
+        add_grid('base_footprint', 'grid' + str(i), 0.05, 0.05, min_p, max_p, pcl)
+
+        # behind door
+        pose = PoseStamped()
+        pose.header.frame_id = 'base_footprint'
+        pose.header.stamp = rospy.Time.now()
+        pose.pose.position.x = res.pose.pose.position.x + 0.2
+        pose.pose.position.y = res.pose.pose.position.y + 0.3
+        pose.pose.position.z = centre_point.z
+        pose.pose.orientation = res.pose.pose.orientation
+        res = move(pose)
+        print res.pose.pose
+
+        ps_ctl('CLEAR_COLLISION')
+
+        # open door
+        pose = PoseStamped()
+        pose.header.frame_id = 'base_footprint'
+        pose.header.stamp = rospy.Time.now()
+        pose.pose.position.x = 0.5
+        pose.pose.position.y = -0.5
+        pose.pose.position.z = centre_point.z
+        pose.pose.orientation = res.pose.pose.orientation
+        res = move(pose)
+        print res.pose.pose
+
+
+
+    
+    elif sys.argv[1] == 'push':
+        ps_ctl('CLEAR_COLLISION')
+
+        pose = PoseStamped()
+        pose.header.frame_id = 'base_footprint'
+        pose.header.stamp = rospy.Time.now()
+        pose.pose.position.x = res.pose.pose.position.x + 0.35
+        pose.pose.position.y = res.pose.pose.position.y + 0.35
+        pose.pose.position.z = centre_point.z
+        pose.pose.orientation = res.pose.pose.orientation
+        res = move(pose)
+        print res.pose.pose
+
+        cmd_vel(1)
 
     break
 

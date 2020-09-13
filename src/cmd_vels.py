@@ -3,6 +3,7 @@ from geometry_msgs.msg import Twist
 from rosgraph_msgs.msg import Clock
 
 def move(x_dist, speed=0.5):
+    rospy.wait_for_message('/clock', Clock)
     max_vel = rospy.get_param('/mobile_base_controller/linear/x/max_velocity')
     min_vel = rospy.get_param('/mobile_base_controller/linear/x/min_velocity')
 
@@ -40,5 +41,4 @@ def move_to_base_footprint(x,y):
 
 if __name__ == '__main__':
     rospy.init_node('move_the_boy')
-    rospy.wait_for_message('/clock', Clock)
     move(-2)
