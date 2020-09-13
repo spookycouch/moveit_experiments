@@ -160,7 +160,7 @@ for detection in detections:
         # pass this pcl to the grid creator
         max_p = Point(2,2,1)
         min_p = Point(-1,-1,0.5)
-        res = add_grid('base_footprint', 'grid' + str(i), 0.05, 0.05, min_p, max_p, pcl.points)
+        res = add_grid('base_footprint', 'grid' + str(i), Vector3(0.05,0.05,0.05), Vector3(0.05,0.05,0.05), min_p, max_p, pcl.points)
 
 
     # pre-approach
@@ -211,7 +211,7 @@ for detection in detections:
         pcl = get_pclmsg()
         max_p = Point(2,2,1)
         min_p = Point(-1,-1,0.5)
-        add_grid('base_footprint', 'grid' + str(i), 0.05, 0.05, min_p, max_p, pcl)
+        add_grid('base_footprint', 'grid' + str(i), Vector3(0.05,0.05,0.05), Vector3(0.05,0.05,0.05), min_p, max_p, pcl)
 
         # behind door
         pose = PoseStamped()

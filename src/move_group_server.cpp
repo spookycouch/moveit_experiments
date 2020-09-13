@@ -36,7 +36,7 @@ moveit::planning_interface::PlanningSceneInterface* planning_scene_interface;
  * Add occupany grid
  * 
  * filters cloud to only include points bounded by filter_min and filter_max
- * downsamples cloud s.t. each point is a grid_size centimetre cube
+ * downsamples cloud s.t. each point is a grid_leaf_size centimetre cuboid
  *
  * creates an occupancy grid in the planning scene via a collision object
  * including each point captured in the filtered/downsampled cloud
@@ -76,7 +76,7 @@ bool add_occupancy_grid(jeff_moveit::AddOccupancyGrid::Request &req, jeff_moveit
     // create voxel grid
     pcl::VoxelGrid<pcl::PointXYZ> vg;
     vg.setInputCloud(cloud);
-    vg.setLeafSize(req.grid_size, req.grid_size, req.grid_size);
+    vg.setLeafSize(req.grid_leaf_size.x, req.grid_leaf_size.y, req.grid_leaf_size.z);
     vg.filter(*downsampled_cloud);
     cloud.swap(downsampled_cloud);
 
@@ -100,9 +100,9 @@ bool add_occupancy_grid(jeff_moveit::AddOccupancyGrid::Request &req, jeff_moveit
         shape_msgs::SolidPrimitive primitive;
         primitive.type = primitive.BOX;
         primitive.dimensions.resize(3);
-        primitive.dimensions[0] = req.box_size;
-        primitive.dimensions[1] = req.box_size;
-        primitive.dimensions[2] = req.box_size;
+        primitive.dimensions[0] = req.box_dimensions.x;
+        primitive.dimensions[1] = req.box_dimensions.y;
+        primitive.dimensions[2] = req.box_dimensions.z;
 
         geometry_msgs::Pose box_pose;
         box_pose.position.x = point_it->x;
