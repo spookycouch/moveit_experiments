@@ -2,14 +2,17 @@ path_constraint:
   name: door_constraints
   constraints:
   - type: orientation
-    frame_id: base_footprint
+    frame_id: base_link
     link_name: arm_7_link
     orientation: [3.142, 0, 0] #RPY
     tolerances: [0.25,0.25,0.25]
     weight: 1.0
-  - type: orientation
-    frame_id: base_footprint
-    link_name: arm_6_link
-    orientation: [3.142, 0, 0] #RPY
-    tolerances: [0.25,0.25,0.25]
+  - type: position
+    frame_id: arm_1_link
+    link_name: arm_4_link
+    target_offset: [0.01, 0.01, 0.01]
+    region:
+      x: [-2, 2] # [start, end]
+      y: [-2, 2] # [start, end]
+      z: [-2, -0.1] # [start, end]
     weight: 1.0

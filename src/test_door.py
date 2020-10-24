@@ -7,13 +7,14 @@ from cv_bridge import CvBridge, CvBridgeError
 from scipy.optimize import linear_sum_assignment
 from tf.transformations import quaternion_from_euler
 from cmd_vels import move as cmd_vel
+import laser_geometry as lg
 
 from jeff_segment_objects.srv import SegmentObjects, RemoveBox
 from jeff_moveit.srv import AddCollisionBox, PlanningSceneControl, AddOccupancyGrid, Pick, Move
 from lasr_object_detection_yolo.srv import YoloDetection
 
 from geometry_msgs.msg import Point, Quaternion, PointStamped, Vector3, PoseStamped, Twist
-from sensor_msgs.msg import PointCloud2, Image
+from sensor_msgs.msg import PointCloud2, Image, LaserScan
 from moveit_msgs.msg import PlanningScene, PlanningSceneComponents
 from moveit_msgs.srv import GetPlanningScene
 
@@ -24,6 +25,10 @@ import tf2_ros
 from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
 from math import pi
 
+# TODO:
+# implement AddPathConstraints in move_group_server.cpp
+CONSTRAINT_POS_ARM_BELOW_SHOULDER = None
+CONSTRAINT_ORI_GRIPPER_180 = None
 
 
 def transform_pclmsg(target_frame, pclmsg):
@@ -78,7 +83,32 @@ def play_motion(motion_name):
     play_motion_client.send_goal(pose_goal)
     play_motion_client.wait_for_result()
 
-if not len(sys.argv) == 2 or not (sys.argv[1] == 'pull' or sys.argv[1] == 'push'):
+
+def collision_from_laser(box_size):
+    lp = lg.LaserProjection()
+    ps_ctl = rospy.ServiceProxy('planning_scene_ctl', PlanningSceneControl)
+    add_grid = rospy.ServiceProxy('add_occupancy_grid', AddOccupancyGrid)
+
+    # project laserscan to pcl
+    scan = rospy.wait_for_message('/scan', LaserScan)
+    pcl = lp.projectLaser(scan)
+
+    # laser is on the floor, push the centre point up for our wall
+    cloud = np.fromstring(pcl.data, dtype=np.float32)
+    cloud = cloud.reshape(pcl.height, pcl.width, int(pcl.point_step/4))
+    cloud[:,:,0] += 0.01
+    cloud[:,:,2] += 1
+    pcl.data = list(cloud.view(np.uint8).flatten())
+
+    # create wall from points
+    leaf_size = Vector3(0.01,0.01,0.01)
+    max_p = Point(2,2,2)
+    min_p = Point(-1,-2,0)
+    res = add_grid('base_footprint', 'grid', leaf_size, box_size, min_p, max_p, pcl)
+
+
+
+if not len(sys.argv) == 2 or not (sys.argv[1] == 'pull' or sys.argv[1] == 'push' or sys.argv[1] == 'test'):
     print 'usage: rosrun jeff_moveit test_door.py <pull/push>'
     sys.exit(0)
 
@@ -147,20 +177,17 @@ for detection in detections:
     centre_point = Point(*centre_point)
     add_box('/base_footprint', 'grab_this', size, centre_point, Quaternion(*quaternion_from_euler(0,0,0)))
 
-    # motions = ['look_left', 'look_right', 'look_straight']
-    motions = ['look_straight']
+    # remove 8cm around the item we wana pick up - for occupancy grid
+    pcl = get_pclmsg()
+    pcl = remove_box(pcl, Point(*min3d), Point(*max3d), 0.08)
 
-    for i, motion in enumerate(motions):
-        play_motion(motion)
-        pcl = rospy.wait_for_message('/xtion/depth_registered/points', PointCloud2)
+    # pass this pcl to the grid creator
+    max_p = Point(2,2,1)
+    min_p = Point(-1,-1,0.5)
+    res = add_grid('base_footprint', 'grid_xtion', Vector3(0.05,0.05,0.05), Vector3(0.05,0.05,0.05), min_p, max_p, pcl.points)
 
-        # remove 8cm around the item we wana pick up - for occupancy grid
-        pcl = remove_box(pcl, Point(*min3d), Point(*max3d), 0.08)
-
-        # pass this pcl to the grid creator
-        max_p = Point(2,2,1)
-        min_p = Point(-1,-1,0.5)
-        res = add_grid('base_footprint', 'grid' + str(i), Vector3(0.05,0.05,0.05), Vector3(0.05,0.05,0.05), min_p, max_p, pcl.points)
+    # add laser scan as collision wall
+    # collision_from_laser()
 
 
     # pre-approach
@@ -196,6 +223,8 @@ for detection in detections:
         # reverse
         cmd_vel(-0.3)
 
+        collision_from_laser(Vector3(0.01,0.01,2.5))
+
         # reset
         play_motion('open_gripper')
         pose = PoseStamped()
@@ -208,17 +237,15 @@ for detection in detections:
         move(pose)
         print res.pose.pose
 
-        pcl = get_pclmsg()
-        max_p = Point(2,2,1)
-        min_p = Point(-1,-1,0.5)
-        add_grid('base_footprint', 'grid' + str(i), Vector3(0.05,0.05,0.05), Vector3(0.05,0.05,0.05), min_p, max_p, pcl)
+        # add laser scan as collision wall
+        collision_from_laser(Vector3(0.1,0.1,2.5))
 
         # behind door
         pose = PoseStamped()
         pose.header.frame_id = 'base_footprint'
         pose.header.stamp = rospy.Time.now()
-        pose.pose.position.x = res.pose.pose.position.x + 0.2
-        pose.pose.position.y = res.pose.pose.position.y + 0.3
+        pose.pose.position.x = 0.3
+        pose.pose.position.y = 0.4
         pose.pose.position.z = centre_point.z
         pose.pose.orientation = res.pose.pose.orientation
         res = move(pose)

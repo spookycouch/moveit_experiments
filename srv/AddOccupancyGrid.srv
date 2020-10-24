@@ -1,7 +1,7 @@
 string frame_id
 string id
-float64 grid_size
-float64 box_size
+geometry_msgs/Vector3 grid_leaf_size
+geometry_msgs/Vector3 box_dimensions
 geometry_msgs/Point filter_min
 geometry_msgs/Point filter_max
 sensor_msgs/PointCloud2 points

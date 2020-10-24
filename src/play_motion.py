@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 import rospy
+import sys
 import actionlib
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
 
@@ -20,5 +21,9 @@ def play_motion(motion_name):
 
 if __name__ == '__main__':
     rospy.init_node('quick_play_motion')
+    command = 'home'
+    if len(sys.argv) == 2:
+        command = sys.argv[1]
+    print 'playing motion', command
     while not rospy.is_shutdown():
-        play_motion('home')
+        play_motion(command)
